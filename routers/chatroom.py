@@ -47,3 +47,11 @@ async def delete_room(id, db: Session = Depends(get_db), current_user: models.Us
 
     db.query(models.ChatRoom).filter(models.ChatRoom.id == id).delete(synchronize_session=False)
     db.commit()
+
+@router.post('/room/{id}/messages')
+async def send_message(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    pass
+
+@router.get('/room/{id}/messages')
+async def show_all_messages(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    pass
