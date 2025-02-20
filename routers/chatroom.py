@@ -1,57 +1,74 @@
 from fastapi import APIRouter, Depends, status, HTTPException
-from typing import List
-import models
+from models import User, ChatRoom, RoomMember
 from oath2 import get_current_user
 import schemas
 from sqlalchemy.orm import Session
 from database import get_db
 
 router = APIRouter(
-    prefix= "/chat",
     tags=['Chat Room']
 )
 
-@router.get('/room')
-async def all_rooms(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    # fetch all chat rooms
-    rooms = db.query(models.ChatRoom).all()
+@router.get('/chatroom')
+async def all_rooms(db: Session = Depends(get_db)):
+    rooms = db.query(ChatRoom).all()
+    return rooms
+
+@router.get('/chatroom/my_rooms', status_code=status.HTTP_200_OK)
+async def my_rooms(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    rooms = (
+        db.query(ChatRoom)
+        .join(RoomMember, ChatRoom.id == RoomMember.room_id)
+        .filter(RoomMember.user_name == current_user.username)
+        .all()
+    )
     return rooms
 
 
-@router.get('/room/{id}')
-async def show_room(id, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    # fetch room with id = id
-    room = db.query(models.ChatRoom).filter(models.ChatRoom.id == id).first()
-
-    if not room:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'Room with id {id} is unavailable.')
-    return room
-
-@router.post('/room', status_code=status.HTTP_201_CREATED)
-async def create_room(request:schemas.ChatRoom, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    existing_room = db.query(models.ChatRoom).filter(models.ChatRoom.name == request.name).first()
+@router.post('/chatroom', status_code=status.HTTP_201_CREATED)
+async def create_room(request:schemas.ChatRoom, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    existing_room = db.query(ChatRoom).filter(ChatRoom.name == request.name).first()
     if existing_room:
         raise HTTPException(status_code=status.HTTP_226_IM_USED, detail=f'Room with this name already exists.')
-    new_room = models.ChatRoom(name=request.name, description=request.description)
+    new_room = ChatRoom(name=request.name, description=request.description, created_by=current_user.id)
     db.add(new_room)
     db.commit()
     db.refresh(new_room)
-    return new_room
+    return {f'Room created Successfully!'}
 
-@router.delete('/room/{id}', status_code=status.HTTP_204_NO_CONTENT)
-async def delete_room(id, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    room = db.query(models.ChatRoom).filter(models.ChatRoom.id == id).first()
+
+@router.get('/chatroom/{id}')
+async def show_room(id:int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    room = db.query(ChatRoom).filter(ChatRoom.id == id).first()
 
     if not room:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Room with id {id} is unavailable")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'Room with id {id} is unavailable.')
+    creator_name = room.creator.name if room.creator else "Unknown"
 
-    db.query(models.ChatRoom).filter(models.ChatRoom.id == id).delete(synchronize_session=False)
+    return {
+        "room_name": room.name,
+        "created_by": creator_name
+    }
+
+@router.post('/chatroom/join', status_code=status.HTTP_200_OK)
+async def join_room(request: schemas.JoinRoomRequest,
+                    db: Session = Depends(get_db),
+                    current_user: User = Depends(get_current_user)):
+    room = db.query(ChatRoom).filter(ChatRoom.id == request.room_id).first()
+    if not room:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat room does not exist")
+
+    existing_member = (
+        db.query(RoomMember)
+        .filter(RoomMember.user_name == current_user.username, RoomMember.room_id == room.id)
+        .first()
+    )
+
+    if existing_member:
+        return {"message": f"User {current_user.username} is already a member of room {room.id}"}
+
+    new_member = RoomMember(user_name=current_user.username, room_id=room.id)
+    db.add(new_member)
     db.commit()
 
-@router.post('/room/{id}/messages')
-async def send_message(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    pass
-
-@router.get('/room/{id}/messages')
-async def show_all_messages(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    pass
+    return {"message": f"User {current_user.username} successfully joined room {room.id}"}

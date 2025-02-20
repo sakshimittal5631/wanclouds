@@ -1,13 +1,11 @@
 from fastapi import APIRouter, Depends
 from oath2 import get_current_user
-import schemas
-from sqlalchemy.orm import Session
-from database import get_db
+import models
 
 router = APIRouter(
-    tags=['Chatapp']
+    tags=['Home']
 )
 
 @router.get('/')
-async def home(db:Session = Depends(get_db), get_current_user: schemas.User = Depends(get_current_user)):
-    return {"Welcome to my chatapp"}
+async def home(current_user: models.User = Depends(get_current_user)):
+    return {f"Welcome to the FastChat, {current_user.name}"}
