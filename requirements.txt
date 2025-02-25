@@ -1,6 +1,9 @@
 "fastapi[standard]"
-sqlalchemy
+sqlalchemy~=2.0.38
 pymysql
-passlib
+passlib~=1.7.4
 bcrypt==4.0.1
 python-jose
+fastapi~=0.115.8
+pydantic~=2.10.6
+python-dotenv~=1.0.1

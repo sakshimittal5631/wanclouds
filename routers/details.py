@@ -11,5 +11,6 @@ async def read_profile(current_user: models.User = Depends(get_current_user)):
     return {
         "user_id": current_user.id,
         "username": current_user.username,
-        "name": current_user.name
+        "name": current_user.name,
+        "email":current_user.email
     }

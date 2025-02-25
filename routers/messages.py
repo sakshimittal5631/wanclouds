@@ -10,23 +10,23 @@ router = APIRouter(
     tags=['Messages']
 )
 
-@router.post('/chatroom/{id}')
+@router.post('/channel/{id}', status_code=status.HTTP_200_OK)
 async def show_users(id:int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     room = db.query(ChatRoom).filter(ChatRoom.id == id).first()
 
     if not room:
-        return {"message": "Room not found"}
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Channel not found")
 
     members = db.query(RoomMember).filter(RoomMember.room_id == id).all()
 
     if not members:
-        return {"message": "No users in this room"}
+        return {"message": "No users in this channel"}
 
     user_list = [{"username": member.user_name} for member in members]
 
-    return {"room_id": id, "users": user_list}
+    return {"channel_id": id, "users": user_list}
 
-@router.post('/chatroom/{id}/messages', status_code=status.HTTP_201_CREATED)
+@router.post('/channel/{id}/messages', status_code=status.HTTP_201_CREATED)
 async def send_message(
         id: int,
         request: schemas.SendMessageRequest,
@@ -36,7 +36,7 @@ async def send_message(
     room = db.query(ChatRoom).filter(ChatRoom.id == id).first()
 
     if not room:
-        raise HTTPException(status_code=404, detail="Room not found")
+        raise HTTPException(status_code=404, detail="Channel not found")
 
     is_member = db.query(RoomMember).filter(
         RoomMember.room_id == id,
@@ -44,7 +44,7 @@ async def send_message(
     ).first()
 
     if not is_member:
-        raise HTTPException(status_code=403, detail="You are not a member of this room")
+        raise HTTPException(status_code=403, detail="You are not a member of this channel")
 
     new_message = Message(
         text=request.text,
@@ -59,7 +59,7 @@ async def send_message(
 
     return {"Sent"}
 
-@router.get('/chatroom/{id}/messages')
+@router.get('/channel/{id}/messages', status_code=status.HTTP_200_OK)
 async def show_all_messages(
     id: int,
     db: Session = Depends(get_db),
@@ -71,7 +71,7 @@ async def show_all_messages(
     ).first()
 
     if not membership:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a member of this room")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a member of this channel")
 
 
     messages = (

@@ -6,16 +6,16 @@ from sqlalchemy.orm import Session
 from database import get_db
 
 router = APIRouter(
-    tags=['Chat Room']
+    tags=['Channels']
 )
 
-@router.get('/chatroom')
-async def all_rooms(db: Session = Depends(get_db)):
+@router.get('/channel', status_code=status.HTTP_200_OK)
+async def all_channels(db: Session = Depends(get_db)):
     rooms = db.query(ChatRoom).all()
     return rooms
 
-@router.get('/chatroom/my_rooms', status_code=status.HTTP_200_OK)
-async def my_rooms(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.get('/channel/my_channels', status_code=status.HTTP_200_OK)
+async def my_channels(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     rooms = (
         db.query(ChatRoom)
         .join(RoomMember, ChatRoom.id == RoomMember.room_id)
@@ -25,38 +25,41 @@ async def my_rooms(db: Session = Depends(get_db), current_user: User = Depends(g
     return rooms
 
 
-@router.post('/chatroom', status_code=status.HTTP_201_CREATED)
-async def create_room(request:schemas.ChatRoom, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.post('/channel', status_code=status.HTTP_201_CREATED)
+async def create_channel(request:schemas.ChatRoom, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     existing_room = db.query(ChatRoom).filter(ChatRoom.name == request.name).first()
     if existing_room:
-        raise HTTPException(status_code=status.HTTP_226_IM_USED, detail=f'Room with this name already exists.')
+        raise HTTPException(status_code=status.HTTP_226_IM_USED, detail=f'Channel with this name already exists.')
     new_room = ChatRoom(name=request.name, description=request.description, created_by=current_user.id)
     db.add(new_room)
     db.commit()
     db.refresh(new_room)
-    return {f'Room created Successfully!'}
+    return (f'Channel ID: {new_room.id}\n'
+            f'Channel Name: {new_room.name}\n'
+            f'Channel Admin: {current_user.name}')
 
 
-@router.get('/chatroom/{id}')
-async def show_room(id:int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.get('/channel/{id}', status_code=status.HTTP_200_OK)
+async def show_channel(id:int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     room = db.query(ChatRoom).filter(ChatRoom.id == id).first()
 
     if not room:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'Room with id {id} is unavailable.')
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f'Channel with id {id} is unavailable.')
     creator_name = room.creator.name if room.creator else "Unknown"
 
     return {
-        "room_name": room.name,
+        "channel_name": room.name,
         "created_by": creator_name
     }
 
-@router.post('/chatroom/join', status_code=status.HTTP_200_OK)
-async def join_room(request: schemas.JoinRoomRequest,
+@router.post('/channel/join/{room_id}', status_code=status.HTTP_200_OK)
+async def join_channel(
+                    room_id: int,
                     db: Session = Depends(get_db),
                     current_user: User = Depends(get_current_user)):
-    room = db.query(ChatRoom).filter(ChatRoom.id == request.room_id).first()
+    room = db.query(ChatRoom).filter(ChatRoom.id == room_id).first()
     if not room:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat room does not exist")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Channel does not exist")
 
     existing_member = (
         db.query(RoomMember)
@@ -65,10 +68,11 @@ async def join_room(request: schemas.JoinRoomRequest,
     )
 
     if existing_member:
-        return {"message": f"User {current_user.username} is already a member of room {room.id}"}
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"User {current_user.username} is already a member of channel {room.id}")
+
 
     new_member = RoomMember(user_name=current_user.username, room_id=room.id)
     db.add(new_member)
     db.commit()
 
-    return {"message": f"User {current_user.username} successfully joined room {room.id}"}
+    return {"message": f"User {current_user.username} successfully joined channel {room.id}"}

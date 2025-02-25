@@ -1,9 +1,10 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from typing import Optional
 
 # User Schemas
 class User(BaseModel):
     name: str
+    email: str
     username: str
     password: str
 
@@ -31,13 +32,13 @@ class TokenData(BaseModel):
 
 class ChatRoom(BaseModel):
     name: str = Field(..., example="General Chat")
-    description: Optional[str] = Field(None, example="A chat room for general discussions.")
+    description: Optional[str] = Field(None, example="A channel for general discussions.")
 
     class Config:
         from_attributes = True
 
-class JoinRoomRequest(BaseModel):
-    room_id: int
+class shareChannelRequest(BaseModel):
+    email: EmailStr
 
 # Message Schemas
 class SendMessageRequest(BaseModel):
