@@ -30,7 +30,7 @@ class TokenData(BaseModel):
     user_id: int | None = None
 
 
-class ChatRoom(BaseModel):
+class Channel(BaseModel):
     name: str = Field(..., example="General Chat")
     description: Optional[str] = Field(None, example="A channel for general discussions.")
 

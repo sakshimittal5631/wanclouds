@@ -1,13 +1,19 @@
-from fastapi import APIRouter, Depends, status, HTTPException
+from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks
 from models import User, ChatRoom, RoomMember
 from oath2 import get_current_user
 import schemas
 from sqlalchemy.orm import Session
 from database import get_db
+from fastapi_mail import FastMail, MessageSchema
+from mail_config import conf
+from typing import List
+import os
 
 router = APIRouter(
     tags=['Channels']
 )
+
+BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000")
 
 @router.get('/channel', status_code=status.HTTP_200_OK)
 async def all_channels(db: Session = Depends(get_db)):
@@ -26,7 +32,7 @@ async def my_channels(db: Session = Depends(get_db), current_user: User = Depend
 
 
 @router.post('/channel', status_code=status.HTTP_201_CREATED)
-async def create_channel(request:schemas.ChatRoom, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def create_channel(request:schemas.Channel, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     existing_room = db.query(ChatRoom).filter(ChatRoom.name == request.name).first()
     if existing_room:
         raise HTTPException(status_code=status.HTTP_226_IM_USED, detail=f'Channel with this name already exists.')
@@ -34,6 +40,11 @@ async def create_channel(request:schemas.ChatRoom, db: Session = Depends(get_db)
     db.add(new_room)
     db.commit()
     db.refresh(new_room)
+
+    new_member = RoomMember(user_name=current_user.username, room_id=new_room.id)
+    db.add(new_member)
+    db.commit()
+
     return (f'Channel ID: {new_room.id}\n'
             f'Channel Name: {new_room.name}\n'
             f'Channel Admin: {current_user.name}')
@@ -76,3 +87,33 @@ async def join_channel(
     db.commit()
 
     return {"message": f"User {current_user.username} successfully joined channel {room.id}"}
+
+async def send_invite_email(recipients: List[str], sender_name: str, room_name: str, join_link: str):
+    message = MessageSchema(
+        subject="Join My Channel",
+        recipients=recipients,
+        body=f"Hello,\n\n{sender_name} has invited you to join the channel '{room_name}'.\nClick the link below to join:\n\n{join_link}",
+        subtype="plain"
+    )
+
+    fm = FastMail(conf)
+    await fm.send_message(message)
+
+@router.post('/channel/share/{room_id}', status_code=status.HTTP_200_OK)
+async def share_channel_link(
+    room_id: int,
+    recipients: List[str],  # Accept multiple email addresses
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    room = db.query(ChatRoom).filter(ChatRoom.id == room_id).first()
+
+    if not room:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Channel does not exist")
+
+    join_link = f"{BASE_URL}/channel/join/{room_id}"
+
+    background_tasks.add_task(send_invite_email, recipients, current_user.username, room.name, join_link)
+
+    return {"message": "Invitations are being sent in the background", "recipients": recipients}
