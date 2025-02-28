@@ -102,7 +102,7 @@ async def send_invite_email(recipients: List[str], sender_name: str, room_name: 
 @router.post('/channel/share/{room_id}', status_code=status.HTTP_200_OK)
 async def share_channel_link(
     room_id: int,
-    recipients: List[str],  # Accept multiple email addresses
+    recipients: List[str],
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
