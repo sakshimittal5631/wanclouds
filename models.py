@@ -24,10 +24,12 @@ class ChatRoom(Base):
     name = Column(String(255))
     description = Column(String(500))
     created_by = Column(Integer, ForeignKey("users.id"))
+    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=False)  # new field
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     creator = relationship("User", back_populates="created_rooms")
+    workspace = relationship("Workspace", back_populates="channels")  # new relationship
     members = relationship("RoomMember", back_populates="room")
     messages = relationship("Message", back_populates="room")
 
@@ -65,3 +67,15 @@ class RoomInviteToken(Base):
     room_id = Column(Integer, ForeignKey("chat_rooms.id"), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     is_used = Column(Boolean, default=False)
+
+
+class Workspace(Base):
+    __tablename__ = "workspaces"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), unique=True, nullable=False)
+    description = Column(String(500))
+    created_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=func.now())
+
+    channels = relationship("ChatRoom", back_populates="workspace")

@@ -33,6 +33,7 @@ class TokenData(BaseModel):
 class Channel(BaseModel):
     name: str = Field(..., example="General Chat")
     description: Optional[str] = Field(None, example="A channel for general discussions.")
+    workspace_id: int
 
     class Config:
         from_attributes = True
@@ -43,3 +44,8 @@ class shareChannelRequest(BaseModel):
 # Message Schemas
 class SendMessageRequest(BaseModel):
     text: str
+
+# Workspaces
+class Workspace(BaseModel):
+    name: str
+    description: str

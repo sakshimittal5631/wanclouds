@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 import models
 from database import engine
-from routers import users, login, home, logout, details, chatroom, messages
+from routers import users, login, home, logout, details, chatroom, messages, workspace
 
 app = FastAPI()
 
@@ -14,3 +14,4 @@ app.include_router(logout.router)
 app.include_router(details.router)
 app.include_router(chatroom.router)
 app.include_router(messages.router)
+app.include_router(workspace.router)
