@@ -1,5 +1,5 @@
 from database import Base
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, func, UniqueConstraint
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, func, UniqueConstraint, Boolean
 from sqlalchemy.orm import relationship
 
 
@@ -56,3 +56,12 @@ class Message(Base):
 
     sender = relationship("User", back_populates="sent_messages")
     room = relationship("ChatRoom", back_populates="messages")
+
+
+class RoomInviteToken(Base):
+    __tablename__ = "room_invite_tokens"
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String(255), unique=True, index=True, nullable=False)
+    room_id = Column(Integer, ForeignKey("chat_rooms.id"), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    is_used = Column(Boolean, default=False)

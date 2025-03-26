@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks
-from models import User, ChatRoom, RoomMember
+from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks, Query
+from models import User, ChatRoom, RoomMember, RoomInviteToken
 from oath2 import get_current_user
 import schemas
 from sqlalchemy.orm import Session
@@ -8,6 +8,8 @@ from fastapi_mail import FastMail, MessageSchema
 from mail_config import conf
 from typing import List
 import os
+import uuid
+from datetime import datetime, timedelta
 
 router = APIRouter(
     tags=['Channels']
@@ -63,27 +65,48 @@ async def show_channel(id:int, db: Session = Depends(get_db), current_user: User
         "created_by": creator_name
     }
 
+
 @router.post('/channel/join/{room_id}', status_code=status.HTTP_200_OK)
 async def join_channel(
-                    room_id: int,
-                    db: Session = Depends(get_db),
-                    current_user: User = Depends(get_current_user)):
+        room_id: int,
+        token: str = Query(..., description="Invitation token"),
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)
+):
     room = db.query(ChatRoom).filter(ChatRoom.id == room_id).first()
     if not room:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Channel does not exist")
+
+    # Validate invitation token
+    invite_token = (
+        db.query(RoomInviteToken)
+        .filter(RoomInviteToken.token == token, RoomInviteToken.room_id == room_id)
+        .first()
+    )
+
+    if not invite_token:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid invitation token")
+    if invite_token.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invitation token has expired")
+    if invite_token.is_used:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invitation token has already been used")
+
 
     existing_member = (
         db.query(RoomMember)
         .filter(RoomMember.user_name == current_user.username, RoomMember.room_id == room.id)
         .first()
     )
-
     if existing_member:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"User {current_user.username} is already a member of channel {room.id}")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"User {current_user.username} is already a member of channel {room.id}"
+        )
 
-
+    # Add the new member and mark the token as used
     new_member = RoomMember(user_name=current_user.username, room_id=room.id)
     db.add(new_member)
+    invite_token.is_used = True
     db.commit()
 
     return {"message": f"User {current_user.username} successfully joined channel {room.id}"}
@@ -99,20 +122,27 @@ async def send_invite_email(recipients: List[str], sender_name: str, room_name: 
     fm = FastMail(conf)
     await fm.send_message(message)
 
+
 @router.post('/channel/share/{room_id}', status_code=status.HTTP_200_OK)
 async def share_channel_link(
-    room_id: int,
-    recipients: List[str],
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+        room_id: int,
+        recipients: List[str],
+        background_tasks: BackgroundTasks,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)
 ):
     room = db.query(ChatRoom).filter(ChatRoom.id == room_id).first()
-
     if not room:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Channel does not exist")
 
-    join_link = f"{BASE_URL}/channel/join/{room_id}"
+    new_token = str(uuid.uuid4())
+    expires_at = datetime.utcnow() + timedelta(hours=1)
+
+    invite_token = RoomInviteToken(token=new_token, room_id=room.id, expires_at=expires_at)
+    db.add(invite_token)
+    db.commit()
+
+    join_link = f"{BASE_URL}/channel/join/{room_id}?token={new_token}"
 
     background_tasks.add_task(send_invite_email, recipients, current_user.username, room.name, join_link)
 
